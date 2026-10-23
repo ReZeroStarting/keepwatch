@@ -11,8 +11,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ["3.9", "3.12", "3.13"]
+        # 3.9 runs on Linux only: the windows-latest 3.9 runner is the flakiest
+        # combination we had (it stalled in setup-python on a commit that was
+        # otherwise green). Linux still proves 3.9 compatibility.
+        include:
+          - os: ubuntu-latest
+            python: "3.9"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: ubuntu-latest
+            python: "3.13"
+          - os: windows-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.13"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
