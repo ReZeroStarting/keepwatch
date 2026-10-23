@@ -89,6 +89,13 @@ class TestRun(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn(first, out)
 
+    def test_oldest_is_deterministic_for_tasks_created_in_one_tick(self):
+        # Two tasks sent back to back must still have a stable order.
+        call("--root", self.root, "send", "--from", "reviewer", "--to", "builder", "--subject", "b2")
+        store = core.Store(self.root)
+        ids = [core.oldest_pending(store, "builder")["id"] for _ in range(3)]
+        self.assertEqual(len(set(ids)), 1)
+
     def test_no_pending_task_is_exit_code_2(self):
         call("--root", self.root, "run", "--who", "builder", "--", *ok_cmd())
         code, _ = call("--root", self.root, "run", "--who", "builder", "--", *ok_cmd())

@@ -68,7 +68,9 @@ def utcnow() -> datetime:
 
 
 def stamp(dt: datetime | None = None) -> str:
-    return (dt or utcnow()).isoformat(timespec="seconds").replace("+00:00", "Z")
+    # Milliseconds, not seconds: two tasks created in the same second must still
+    # have a deterministic order when we pick "the oldest pending one".
+    return (dt or utcnow()).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def parse_stamp(text: str) -> datetime:
@@ -396,7 +398,7 @@ def oldest_pending(store: Store, agent: str) -> dict[str, Any] | None:
     tasks = list_tasks(store, agent, PENDING)
     if not tasks:
         return None
-    return min(tasks, key=lambda t: t.get("created_at", ""))
+    return min(tasks, key=lambda t: (t.get("created_at", ""), t["id"]))
 
 
 def verify(store: Store, task_id: str, name: str, rc: int) -> dict[str, Any]:
