@@ -5,7 +5,7 @@
 
 import tempfile
 
-from nightshift import core
+from keepwatch import core
 
 
 def main() -> None:

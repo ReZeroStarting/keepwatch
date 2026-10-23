@@ -14,17 +14,17 @@ from . import __version__, core
 
 
 def _default_root() -> str:
-    return os.environ.get("NIGHTSHIFT_ROOT", ".")
+    return os.environ.get("KEEPWATCH_ROOT", ".")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="nightshift",
+        prog="keepwatch",
         description="Keep agent work alive when the process that started it is not.",
     )
-    parser.add_argument("--root", default=_default_root(), help="work root (default: $NIGHTSHIFT_ROOT or .)")
+    parser.add_argument("--root", default=_default_root(), help="work root (default: $KEEPWATCH_ROOT or .)")
     parser.add_argument("--json", action="store_true", help="machine readable output")
-    parser.add_argument("--version", action="version", version=f"nightshift {__version__}")
+    parser.add_argument("--version", action="version", version=f"keepwatch {__version__}")
 
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -65,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run = sub.add_parser(
         "run",
         help="claim a task, run a command, record the exit code and close or release it",
-        usage="nightshift run --who AGENT [--id ID] [--ttl SECONDS] [--max-tries N] -- COMMAND ...",
+        usage="keepwatch run --who AGENT [--id ID] [--ttl SECONDS] [--max-tries N] -- COMMAND ...",
     )
     p_run.add_argument("--who", required=True)
     p_run.add_argument("--id", help="task id (default: the oldest pending task)")
@@ -180,7 +180,7 @@ def run(args: argparse.Namespace) -> int:
         _emit(args, state, human)
         return core.EXIT_OK if state["ok"] else core.EXIT_BLOCKED
 
-    raise core.NightshiftError(f"unknown command: {args.command}")
+    raise core.keepwatchError(f"unknown command: {args.command}")
 
 
 def run_task(store: core.Store, args: argparse.Namespace) -> int:
@@ -189,8 +189,8 @@ def run_task(store: core.Store, args: argparse.Namespace) -> int:
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
     if not cmd:
-        raise core.NightshiftError(
-            "no command given; use: nightshift run --who AGENT -- COMMAND ..."
+        raise core.keepwatchError(
+            "no command given; use: keepwatch run --who AGENT -- COMMAND ..."
         )
 
     core.heartbeat(store, args.who)
@@ -233,8 +233,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return run(args)
-    except core.NightshiftError as exc:
-        print(f"nightshift: {exc}", file=sys.stderr)
+    except core.keepwatchError as exc:
+        print(f"keepwatch: {exc}", file=sys.stderr)
         return exc.code
 
 

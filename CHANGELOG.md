@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1 — renamed to keepwatch
+
+The project was called `nightshift` in 0.1.0. That name is taken on PyPI by an unrelated 2021
+tool for plotting NMR spectra, so the project, the package, the CLI and the repository were
+renamed. Behaviour is unchanged.
+
+### Changed
+- package `nightshift` → `keepwatch`; CLI `nightshift` → `keepwatch`
+- env var `NIGHTSHIFT_ROOT` → `KEEPWATCH_ROOT`
+- repository `ReZeroStarting/nightshift` → `ReZeroStarting/keepwatch` (GitHub redirects the
+  old URL)
+- docs rewritten in English, with the Chinese originals under `docs/zh/`
+
 ## 0.1.0 — first working version
 
 First release. Not published to PyPI yet; install from the repository.

@@ -143,7 +143,7 @@ ping" step, because a heartbeat maintained by discipline is a heartbeat that sto
 | `next_steps` | human-readable list: what is waiting, what is stuck |
 | `ok` | false when any lease is expired |
 
-`status` exits **13** when `ok` is false, so `nightshift status || alert` works in cron.
+`status` exits **13** when `ok` is false, so `keepwatch status || alert` works in cron.
 
 ## 8. Exit codes
 

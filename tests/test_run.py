@@ -1,4 +1,4 @@
-"""`nightshift run` is the one command an agent should have to remember."""
+"""`keepwatch run` is the one command an agent should have to remember."""
 
 import contextlib
 import io
@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nightshift import core
-from nightshift.cli import main
+from keepwatch import core
+from keepwatch.cli import main
 
 PY = sys.executable
 

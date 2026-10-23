@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nightshift import core
-from nightshift.cli import main
+from keepwatch import core
+from keepwatch.cli import main
 
 
 def call(*argv: str) -> tuple[int, str]:

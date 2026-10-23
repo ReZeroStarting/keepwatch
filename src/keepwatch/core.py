@@ -1,4 +1,4 @@
-"""nightshift core.
+"""keepwatch core.
 
 Three ideas, nothing more:
 
@@ -42,21 +42,21 @@ EXIT_HELD = 3
 EXIT_BLOCKED = 13
 
 
-class NightshiftError(Exception):
+class keepwatchError(Exception):
     """Base error. ``code`` is part of the CLI contract."""
 
     code = EXIT_ERROR
 
 
-class NotFound(NightshiftError):
+class NotFound(keepwatchError):
     code = EXIT_NOT_FOUND
 
 
-class Held(NightshiftError):
+class Held(keepwatchError):
     code = EXIT_HELD
 
 
-class Blocked(NightshiftError):
+class Blocked(keepwatchError):
     code = EXIT_BLOCKED
 
 
@@ -93,7 +93,7 @@ class Store:
     # -- paths ----------------------------------------------------------
     def agent_dir(self, agent: str) -> Path:
         if not AGENT_RE.match(agent):
-            raise NightshiftError(f"bad agent id: {agent!r} (want [a-z0-9_-]{{1,32}})")
+            raise keepwatchError(f"bad agent id: {agent!r} (want [a-z0-9_-]{{1,32}})")
         return self.root / "agents" / agent
 
     def box(self, agent: str, box: str) -> Path:
@@ -120,7 +120,7 @@ class Store:
 
     def require(self) -> None:
         if not (self.root / "agents").is_dir():
-            raise NightshiftError(f"{self.root} is not a nightshift root; run `init` first")
+            raise keepwatchError(f"{self.root} is not a keepwatch root; run `init` first")
 
     def agents(self) -> list[str]:
         base = self.root / "agents"
@@ -144,7 +144,7 @@ def _read(path: Path) -> dict[str, Any]:
                 raise Held(f"task is busy (locked by another process): {path.name}") from None
             time.sleep(0.005)
         except json.JSONDecodeError as exc:
-            raise NightshiftError(f"corrupt task file {path.name}: {exc}") from exc
+            raise keepwatchError(f"corrupt task file {path.name}: {exc}") from exc
     raise Held(f"task is busy: {path.name}")
 
 
@@ -267,7 +267,7 @@ def new_task_id() -> str:
 def send(store: Store, sender: str, to: str, subject: str, body: str = "") -> dict[str, Any]:
     store.require()
     if to not in store.agents():
-        raise NightshiftError(f"unknown agent: {to!r}")
+        raise keepwatchError(f"unknown agent: {to!r}")
     task = {
         "id": new_task_id(),
         "from": sender,
@@ -294,7 +294,7 @@ def list_tasks(store: Store, agent: str, box: str = PENDING) -> list[dict[str, A
     for path in sorted(folder.glob("*.json")):
         try:
             tasks.append(_read(path))
-        except NightshiftError:
+        except keepwatchError:
             continue
     return tasks
 

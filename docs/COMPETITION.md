@@ -36,7 +36,7 @@ In other words: **waking, liveness, reaping and resuming are all pushed onto the
 
 ### Side by side
 
-| | agent-mailbox | nightshift |
+| | agent-mailbox | keepwatch |
 |---|---|---|
 | transport | MCP over stdio | plain directories |
 | task semantics | explicit accept | claim + lease |
@@ -72,14 +72,15 @@ In other words: **waking, liveness, reaping and resuming are all pushed onto the
 
 ## 4. Naming
 
-Already taken: `agentbus`, `agent-mailbox`, `agent-watchdog`, `deadman`, `mailbox-mcp`.
+This project was called `nightshift` until v0.1.1. That name is taken on PyPI by an unrelated
+2021 tool for plotting simulated NMR spectra, so the project was renamed.
 
-Candidates (must be checked on both PyPI and GitHub before any release):
+`keepwatch` was free on PyPI when checked (2026-10-23). Names that were also taken at that
+time: `agentbus`, `agent-mailbox`, `agent-watchdog`, `deadman`, `mailbox-mcp`, `backstop`,
+`watchpost`, `handover`, `tallyman`, `taskkeeper`, `nightshift`.
 
-- `nightshift` (working name; "unattended work happens at night")
-- `mailbox-ops`
-- `silent-failure`
-- `steward`
+Checked and rejected: `nightshift-ops` and `agent-nightshift` were both free, but a prefix
+or suffix buries the name people would actually type.
 
 ## 5. Risks
 

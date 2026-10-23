@@ -66,7 +66,7 @@
 已被占用：`agentbus`、`agent-mailbox`、`agent-watchdog`、`deadman`、`mailbox-mcp`。
 
 候选（发布前必须在 PyPI + GitHub 双查）：
-- `nightshift`（当前工作名，语义：无人值守 = 上夜班）
+- `keepwatch`（当前工作名，语义：无人值守 = 上夜班）
 - `mailbox-ops`
 - `silent-failure`
 - `steward`

@@ -1,9 +1,9 @@
-# nightshift
+# keepwatch
 
 > **Keep work alive when the process that started it is not.**
 > A 300-line, zero-dependency ledger for agents that run unattended.
 
-[![ci](https://github.com/ReZeroStarting/nightshift/actions/workflows/ci.yml/badge.svg)](https://github.com/ReZeroStarting/nightshift/actions/workflows/ci.yml)
+[![ci](https://github.com/ReZeroStarting/keepwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/ReZeroStarting/keepwatch/actions/workflows/ci.yml)
 
 ---
 
@@ -42,7 +42,7 @@ Plus `send`, `renew`, `release`, `reap`, `status`.
 ## The one command you actually need
 
 ```bash
-nightshift run --who builder -- python -m pytest
+keepwatch run --who builder -- python -m pytest
 ```
 
 That does the whole loop in one go:
@@ -66,8 +66,8 @@ silently done twice.
 That is the whole point: **the model can say "it passed"; the ledger is what proves it.**
 
 ```console
-$ nightshift done --who builder --id 20261023T083729-8c4fae
-nightshift: refusing to close 20261023T083729-8c4fae: no verify record with rc=0.
+$ keepwatch done --who builder --id 20261023T083729-8c4fae
+keepwatch: refusing to close 20261023T083729-8c4fae: no verify record with rc=0.
 Run `verify --id ... --name <check> --rc 0` first, or pass --force.
 $ echo $?
 13
@@ -80,36 +80,36 @@ Python 3.9+, no dependencies.
 ```bash
 pip install -e .
 # or just run it from a checkout:
-PYTHONPATH=src python -m nightshift.cli --help
+PYTHONPATH=src python -m keepwatch.cli --help
 ```
 
 ## 60-second demo
 
 ```bash
-nightshift --root /tmp/ns init builder reviewer
+keepwatch --root /tmp/ns init builder reviewer
 
-nightshift --root /tmp/ns send \
+keepwatch --root /tmp/ns send \
   --from reviewer --to builder --subject "batch 3: add login page"
 
-nightshift --root /tmp/ns check --who builder
-nightshift --root /tmp/ns claim --who builder --id <id> --ttl 60
+keepwatch --root /tmp/ns check --who builder
+keepwatch --root /tmp/ns claim --who builder --id <id> --ttl 60
 ```
 
 Now pretend the worker dies. Wait for the lease, then:
 
 ```console
-$ nightshift --root /tmp/ns status
+$ keepwatch --root /tmp/ns status
 root: /tmp/ns
   builder        pending 0  processing 1  done 0  hb 61s (alive)
   reviewer       pending 0  processing 0  done 0  never seen (unknown)
 next:
   - builder: 20261023T083750-ef2c5d held by builder, 1s past its lease - run `reap`
 
-$ nightshift --root /tmp/ns reap
+$ keepwatch --root /tmp/ns reap
 reaped 1 task(s)
   20261023T083750-ef2c5d  back to pending (tries=1)
 
-$ nightshift --root /tmp/ns claim --who builder --id 20261023T083750-ef2c5d
+$ keepwatch --root /tmp/ns claim --who builder --id 20261023T083750-ef2c5d
 claimed 20261023T083750-ef2c5d (try 2) lease until 2026-10-23T08:42:31Z
 ```
 
@@ -117,8 +117,8 @@ The task came back with `tries=1` and the previous owner recorded. Close it, but
 after proof:
 
 ```bash
-nightshift --root /tmp/ns verify --id <id> --name pytest --rc 0
-nightshift --root /tmp/ns done   --who builder --id <id> --note "e2e green"
+keepwatch --root /tmp/ns verify --id <id> --name pytest --rc 0
+keepwatch --root /tmp/ns done   --who builder --id <id> --note "e2e green"
 ```
 
 ## Exit codes
@@ -146,7 +146,7 @@ therefore guarded by `O_CREAT|O_EXCL` on a short-lived token file. This is docum
 **One worker per agent box.** Leases are per agent directory, so `builder` running two
 processes is a configuration error, not a supported mode.
 
-**`status` exits 13 when something needs attention** — so `nightshift status || alert`
+**`status` exits 13 when something needs attention** — so `keepwatch status || alert`
 works in cron.
 
 ## What it is not
