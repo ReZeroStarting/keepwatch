@@ -25,5 +25,7 @@ First release. Not published to PyPI yet; install from the repository.
 - Claiming is guarded by `O_CREAT|O_EXCL`, **not** by rename. On one Windows
   filesystem two concurrent `os.replace()` calls on the same source both reported
   success, which let two workers claim one task. See `docs/PROTOCOL.md`.
-- Tool output is English on purpose (portable across console code pages). The
-  design docs under `docs/` are in Chinese.
+- Tool output is English on purpose (portable across console code pages). Docs are in
+  English, with the original Chinese under `docs/zh/`.
+- Docs describe what the code does. Capabilities that are only designed (message types,
+  depth/trace, gates, checkpoint, dependencies) are listed as "not implemented yet".

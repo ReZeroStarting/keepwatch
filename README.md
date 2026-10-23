@@ -160,9 +160,10 @@ works in cron.
 
 | File | Contents |
 |---|---|
-| [docs/PROTOCOL.md](docs/PROTOCOL.md) | layout, message schema, lease rules, exit codes (Chinese) |
-| [docs/COMPETITION.md](docs/COMPETITION.md) | why this exists next to agent-mailbox / A2A / Temporal (Chinese) |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | v0.1 → v1.0 and the release checklist (Chinese) |
+| [docs/PROTOCOL.md](docs/PROTOCOL.md) | layout, task format, lease rules, exit codes |
+| [docs/COMPETITION.md](docs/COMPETITION.md) | why this exists next to agent-mailbox / A2A / Temporal |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | v0.1 → v1.0 and the release checklist |
+| [docs/zh/](docs/zh/) | 中文原文 (Chinese originals) |
 
 Tests: `PYTHONPATH=src python -m unittest discover -s tests -v`
 
