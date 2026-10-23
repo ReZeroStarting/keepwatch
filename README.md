@@ -4,6 +4,8 @@
 > A 300-line, zero-dependency ledger for agents that run unattended.
 
 [![ci](https://github.com/ReZeroStarting/keepwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/ReZeroStarting/keepwatch/actions/workflows/ci.yml)
+[![pypi](https://img.shields.io/pypi/v/keepwatch.svg)](https://pypi.org/project/keepwatch/)
+[![python](https://img.shields.io/pypi/pyversions/keepwatch.svg)](https://pypi.org/project/keepwatch/)
 
 ---
 
@@ -78,8 +80,13 @@ $ echo $?
 Python 3.9+, no dependencies.
 
 ```bash
+pip install keepwatch
+```
+
+From a checkout instead:
+
+```bash
 pip install -e .
-# or just run it from a checkout:
 PYTHONPATH=src python -m keepwatch.cli --help
 ```
 
