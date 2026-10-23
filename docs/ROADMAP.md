@@ -10,7 +10,8 @@
 ## v0.1 — 能跑起来（✅ 已完成）
 
 - [x] 包结构：`core` / `cli`（一个模块装两种命令，够用就行）
-- [x] 命令：`init` / `send` / `check` / `claim` / `renew` / `done` / `verify` / `reap` / `status`
+- [x] 命令：`init` / `send` / `check` / `claim` / `renew` / `release` / `run` / `done` / `verify` / `reap` / `status`
+- [x] `run` 包装器：认领 → 执行 → 记录真实退出码 → 通过则收工、失败则放回队列、超过 `--max-tries` 打 `suspect`
 - [x] 心跳写入（所有带 `--who` 的命令自动写）
 - [x] 租约：claim 抢锁、TTL、过期回收、经手章（`tries` / `prev_owners`）
 - [x] `done` 前必须有 `rc=0` 的 verify 记录（`--force` 可越）

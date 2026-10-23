@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_verify.add_argument("--id", required=True)
     p_verify.add_argument("--name", required=True)
     p_verify.add_argument("--rc", type=int, required=True)
+
+    p_run = sub.add_parser(
+        "run",
+        help="claim a task, run a command, record the exit code and close or release it",
+        usage="nightshift run --who AGENT [--id ID] [--ttl SECONDS] [--max-tries N] -- COMMAND ...",
+    )
+    p_run.add_argument("--who", required=True)
+    p_run.add_argument("--id", help="task id (default: the oldest pending task)")
+    p_run.add_argument("--ttl", type=int, default=core.DEFAULT_TTL_SECONDS)
+    p_run.add_argument("--max-tries", type=int, default=3)
+    p_run.add_argument("cmd", nargs=argparse.REMAINDER)
 
     sub.add_parser("reap", help="return expired leases to pending")
 
@@ -135,6 +147,9 @@ def run(args: argparse.Namespace) -> int:
         _emit(args, record, [f"recorded {args.name} rc={args.rc} for {args.id}"])
         return core.EXIT_OK
 
+    if args.command == "run":
+        return run_task(store, args)
+
     if args.command == "reap":
         tasks = core.reap(store)
         human = [f"reaped {len(tasks)} task(s)"]
@@ -166,6 +181,51 @@ def run(args: argparse.Namespace) -> int:
         return core.EXIT_OK if state["ok"] else core.EXIT_BLOCKED
 
     raise core.NightshiftError(f"unknown command: {args.command}")
+
+
+def run_task(store: core.Store, args: argparse.Namespace) -> int:
+    """Claim -> run -> verify -> close or release. The one command an agent needs."""
+    cmd = list(args.cmd)
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+    if not cmd:
+        raise core.NightshiftError(
+            "no command given; use: nightshift run --who AGENT -- COMMAND ..."
+        )
+
+    core.heartbeat(store, args.who)
+    task_id = args.id
+    if not task_id:
+        task = core.oldest_pending(store, args.who)
+        if task is None:
+            raise core.NotFound(f"no pending task for {args.who}")
+        task_id = task["id"]
+
+    claimed = core.claim(store, args.who, task_id, args.ttl)
+    label = " ".join(cmd)
+    print(f"running {task_id} (try {claimed['tries']}): {label}", flush=True)
+
+    # stdio is inherited on purpose: the agent's output must reach the human.
+    rc = subprocess.run(cmd, check=False).returncode
+    core.verify(store, task_id, label, rc)
+
+    if rc == 0:
+        core.done(store, args.who, task_id, note=label)
+        print(f"closed {task_id} (rc=0)", flush=True)
+        return core.EXIT_OK
+
+    if claimed["tries"] >= args.max_tries:
+        core.ledger_append(store, "suspect", id=task_id, tries=claimed["tries"], rc=rc)
+        print(
+            f"left {task_id} in processing: rc={rc}, tries={claimed['tries']} >= {args.max_tries}. "
+            f"Check `status`, then `reap` if it should be retried anyway.",
+            flush=True,
+        )
+        return rc if 0 < rc < 256 else core.EXIT_ERROR
+
+    core.release(store, args.who, task_id, reason=f"rc={rc}")
+    print(f"released {task_id} back to pending (rc={rc})", flush=True)
+    return rc if 0 < rc < 256 else core.EXIT_ERROR
 
 
 def main(argv: list[str] | None = None) -> int:

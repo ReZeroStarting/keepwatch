@@ -372,6 +372,33 @@ def renew(store: Store, agent: str, task_id: str, ttl: int = DEFAULT_TTL_SECONDS
     return task
 
 
+def release(store: Store, agent: str, task_id: str, reason: str = "") -> dict[str, Any]:
+    """Put a task back to pending without closing it (failed run, or giving up)."""
+    store.require()
+    path = store.task_path(agent, PROCESSING, task_id)
+    token = store.box(agent, PROCESSING) / f".{task_id}.claim"
+    with _exclusive(token):
+        task = _read(path)
+        lease = task.get("_lease") or {}
+        if lease.get("owner") not in (None, agent):
+            raise Held(f"task {task_id} is held by {lease.get('owner')}")
+        task["state"] = PENDING
+        task["prev_owners"] = list(task.get("prev_owners", [])) + [lease.get("owner")]
+        task["_lease"] = None
+        task["released_at"] = stamp()
+        _write_atomic(path, task)
+        _move(path, store.task_path(agent, PENDING, task_id))
+    ledger_append(store, "release", id=task_id, by=agent, reason=reason)
+    return task
+
+
+def oldest_pending(store: Store, agent: str) -> dict[str, Any] | None:
+    tasks = list_tasks(store, agent, PENDING)
+    if not tasks:
+        return None
+    return min(tasks, key=lambda t: t.get("created_at", ""))
+
+
 def verify(store: Store, task_id: str, name: str, rc: int) -> dict[str, Any]:
     """Record a verification result. The task is not done until this returns 0."""
     store.require()

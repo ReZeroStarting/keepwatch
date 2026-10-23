@@ -35,8 +35,26 @@ Three folders, one ledger, four verbs.
 | `claim` | take one, and hold a lease on it |
 | `done` | close it — **only if a passing `verify` record exists** |
 | `verify` | record a check result (`--rc 0`) against a task |
+| **`run`** | **claim → run a command → record its exit code → close or release** |
 
-Plus `send`, `renew`, `reap`, `status`.
+Plus `send`, `renew`, `release`, `reap`, `status`.
+
+## The one command you actually need
+
+```bash
+nightshift run --who builder -- python -m pytest
+```
+
+That does the whole loop in one go:
+
+1. claims the oldest pending task (or `--id <id>`)
+2. runs the command with inherited stdio, so you still see the output
+3. writes `verify ... --rc <real exit code>` into the ledger
+4. `rc=0` → `done`; `rc!=0` → back to `pending` for another try
+5. after `--max-tries` (default 3) failures → left in `processing` with a `suspect` record
+
+If the process is killed mid-command, nothing is lost: the lease expires and `reap` puts the
+task back. **You do not have to remember to write the ledger — the wrapper does it.**
 
 ## Why it matters
 

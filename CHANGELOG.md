@@ -13,6 +13,9 @@ First release. Not published to PyPI yet; install from the repository.
 - `done` — close a task, **refused unless a `verify ... --rc 0` record exists** (`--force` to override)
 - `verify` — append a check result to the ledger
 - `reap` — return expired leases (and orphaned files) to `pending`, keeping `tries` and `prev_owners`
+- `run` — claim, execute a command, record its real exit code, then close (rc=0) or release
+  (rc!=0); stops after `--max-tries` and leaves a `suspect` record
+- `release` — put a claimed task back to pending without closing it
 - `status` — per-agent counts, heartbeat age, and a `next:` list of what needs attention
 - append-only audit ledger at `audit/YYYY-MM.jsonl`
 - `--json` on every command, and semantic exit codes (0/1/2/3/13)
