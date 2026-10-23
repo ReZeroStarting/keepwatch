@@ -38,6 +38,9 @@ Three folders, one ledger, four verbs.
 | `done` | close it — **only if a passing `verify` record exists** |
 | `verify` | record a check result (`--rc 0`) against a task |
 | **`run`** | **claim → run a command → record its exit code → close or release** |
+| `doctor` | deterministic self-check, exit 0 when healthy |
+| `checkpoint` | write a resume note: what is stuck, what to run next |
+| `pipeline` | open or close the gate for new work (exit 14 when closed) |
 
 Plus `send`, `renew`, `release`, `reap`, `status`.
 

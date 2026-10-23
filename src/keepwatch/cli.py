@@ -78,6 +78,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_status = sub.add_parser("status", help="what is stuck, who is dead, what is next")
     p_status.add_argument("--stale", type=int, default=core.DEFAULT_STALE_SECONDS)
 
+    p_doctor = sub.add_parser("doctor", help="deterministic self-check (exit 0 when healthy)")
+    p_doctor.add_argument("--quiet", action="store_true", help="print only failures and warnings")
+
+    p_ckpt = sub.add_parser("checkpoint", help="write a resume note for a human or a fresh agent")
+    p_ckpt.add_argument("--out", help="where to write it (default: <root>/CHECKPOINT.md)")
+
+    p_gate = sub.add_parser("pipeline", help="open or close the gate for new work")
+    gate_group = p_gate.add_mutually_exclusive_group()
+    gate_group.add_argument("--on", action="store_true", help="accept new work")
+    gate_group.add_argument("--off", action="store_true", help="stop accepting new work")
+    p_gate.add_argument("--note", default="", help="why the gate was changed")
+
     return parser
 
 
@@ -180,7 +192,34 @@ def run(args: argparse.Namespace) -> int:
         _emit(args, state, human)
         return core.EXIT_OK if state["ok"] else core.EXIT_BLOCKED
 
-    raise core.keepwatchError(f"unknown command: {args.command}")
+    if args.command == "doctor":
+        report = core.doctor(store)
+        human = [f"root: {report['root']}"]
+        for check in report["checks"]:
+            if args.quiet and check["status"] == "ok":
+                continue
+            human.append(f"  [{check['status']:<4}] {check['check']:<10} {check['detail']}")
+        human.append("healthy" if report["ok"] else "PROBLEMS FOUND")
+        _emit(args, report, human)
+        return core.EXIT_OK if report["ok"] else core.EXIT_ERROR
+
+    if args.command == "checkpoint":
+        path = core.checkpoint(store, Path(args.out) if args.out else None)
+        _emit(args, {"path": str(path)}, [f"checkpoint written to {path}"])
+        return core.EXIT_OK
+
+    if args.command == "pipeline":
+        if args.on or args.off:
+            state = core.set_pipeline(store, enabled=bool(args.on), note=args.note)
+            word = "open" if state["pipeline_enabled"] else "closed"
+            _emit(args, state, [f"pipeline {word}" + (f" ({args.note})" if args.note else "")])
+            return core.EXIT_OK
+        enabled = core.pipeline_enabled(store)
+        payload = {"pipeline_enabled": enabled}
+        _emit(args, payload, [f"pipeline {'open' if enabled else 'closed'}"])
+        return core.EXIT_OK
+
+    raise core.KeepwatchError(f"unknown command: {args.command}")
 
 
 def run_task(store: core.Store, args: argparse.Namespace) -> int:
@@ -189,7 +228,7 @@ def run_task(store: core.Store, args: argparse.Namespace) -> int:
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
     if not cmd:
-        raise core.keepwatchError(
+        raise core.KeepwatchError(
             "no command given; use: keepwatch run --who AGENT -- COMMAND ..."
         )
 
@@ -233,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return run(args)
-    except core.keepwatchError as exc:
+    except core.KeepwatchError as exc:
         print(f"keepwatch: {exc}", file=sys.stderr)
         return exc.code
 

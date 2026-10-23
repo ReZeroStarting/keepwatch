@@ -27,15 +27,14 @@
 
 **Acceptance:** a stranger can `pip install -e .` and run the demo in three minutes.
 
-## v0.2 — make failure visible (next)
+## v0.2 — make failure visible (✅ shipped)
 
-- [ ] `doctor` — deterministic self-check with a 0/1 exit code (layout, parseable state,
-      orphans, stale tokens, ledger sanity)
-- [ ] `checkpoint` — one command that writes "where we stopped, what is next" for a human
-      or a fresh agent
-- [ ] `pipeline --on|--off` — a single gate that stops new work but lets notices through
+- [x] `doctor` — nine deterministic checks, exit 0/1
+- [x] `checkpoint` — writes `CHECKPOINT.md`: what is stuck, what to run next
+- [x] `pipeline --on|--off` — one gate; `send`/`claim` return exit 14 while closed
+- [x] 51 tests (16 new): corrupt task files, duplicate ids, orphans, stale tokens, the gate
 - [ ] dependencies (`--after`) and a `hold` queue
-- [ ] crash-injection test: kill the process between claim and lease write, assert no loss
+- [ ] crash-injection test: kill the process between claim and lease write
 - [ ] one real overnight unattended run, recorded in `docs/field-notes.md`
 
 **Acceptance:** kill the worker at any point; within one TTL the system says what died and

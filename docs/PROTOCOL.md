@@ -154,22 +154,41 @@ ping" step, because a heartbeat maintained by discipline is a heartbeat that sto
 | 2 | task not found, or already taken by someone else |
 | 3 | task held by another worker, or busy |
 | 13 | blocked: no passing verify, or `status` found something that needs attention |
+| 14 | stopped: the pipeline gate is closed |
 
 **Exit codes are part of the interface.** Agents branch on them instead of parsing prose.
 
-## 9. Not implemented yet
+## 9. Operating commands
 
-Designed, deliberately out of scope for v0.1. Tracked in [ROADMAP](ROADMAP.md):
+### The gate
+
+`state/gate.json` holds `{"pipeline_enabled": false, ...}`. While closed, `send` and `claim`
+refuse with **exit 14**; `status` and `doctor` report `gate: closed`. Nothing is deleted — the
+work waits. `keepwatch pipeline --on` reopens it.
+
+### `doctor`
+
+A deterministic self-check, no model involved. Nine checks: layout, boxes, task parsing,
+duplicate ids across boxes, orphaned processing files, expired leases, stale claim tokens,
+ledger parsing, heartbeat parsing. Exit 0 when nothing is broken; exit 1 when any check
+**fails**. Stale leases and orphans are warnings — `reap` fixes those.
+
+### `checkpoint`
+
+Writes `<root>/CHECKPOINT.md`: per-agent counts, heartbeat age, tasks in progress (with an
+`EXPIRED` marker when a lease has lapsed), the front of each pending queue, the last ten
+ledger records, and the commands to resume. A human or a fresh agent can start from that file.
+
+## 10. Not implemented yet
+
+Designed, tracked in [ROADMAP](ROADMAP.md):
 
 - message `type` (`task` / `reply` / `notice` / `ping`) and `reply_to`
 - `depth` and `trace`, to stop two agents replying to each other forever
-- `pipeline --on|--off` gate and exit code 14
 - dependencies (`--after`) and a `hold` queue
-- `checkpoint` — a one-command resume note for a human or a fresh agent
-- `doctor` — deterministic self-check
 - prioritised pools, broadcast delivery, hand-off between agents
 
-## 10. Out of scope, permanently
+## 11. Out of scope, permanently
 
 - encryption and authentication (same machine, same user is the trust boundary)
 - network transport (use A2A or MCP if you need that; this project stays local)

@@ -40,24 +40,31 @@ EXIT_ERROR = 1
 EXIT_NOT_FOUND = 2
 EXIT_HELD = 3
 EXIT_BLOCKED = 13
+EXIT_STOPPED = 14
 
 
-class keepwatchError(Exception):
+class KeepwatchError(Exception):
     """Base error. ``code`` is part of the CLI contract."""
 
     code = EXIT_ERROR
 
 
-class NotFound(keepwatchError):
+class NotFound(KeepwatchError):
     code = EXIT_NOT_FOUND
 
 
-class Held(keepwatchError):
+class Held(KeepwatchError):
     code = EXIT_HELD
 
 
-class Blocked(keepwatchError):
+class Blocked(KeepwatchError):
     code = EXIT_BLOCKED
+
+
+class Stopped(KeepwatchError):
+    """The pipeline gate is closed: no new work is accepted."""
+
+    code = EXIT_STOPPED
 
 
 # --------------------------------------------------------------------------
@@ -93,7 +100,7 @@ class Store:
     # -- paths ----------------------------------------------------------
     def agent_dir(self, agent: str) -> Path:
         if not AGENT_RE.match(agent):
-            raise keepwatchError(f"bad agent id: {agent!r} (want [a-z0-9_-]{{1,32}})")
+            raise KeepwatchError(f"bad agent id: {agent!r} (want [a-z0-9_-]{{1,32}})")
         return self.root / "agents" / agent
 
     def box(self, agent: str, box: str) -> Path:
@@ -120,7 +127,7 @@ class Store:
 
     def require(self) -> None:
         if not (self.root / "agents").is_dir():
-            raise keepwatchError(f"{self.root} is not a keepwatch root; run `init` first")
+            raise KeepwatchError(f"{self.root} is not a keepwatch root; run `init` first")
 
     def agents(self) -> list[str]:
         base = self.root / "agents"
@@ -144,7 +151,7 @@ def _read(path: Path) -> dict[str, Any]:
                 raise Held(f"task is busy (locked by another process): {path.name}") from None
             time.sleep(0.005)
         except json.JSONDecodeError as exc:
-            raise keepwatchError(f"corrupt task file {path.name}: {exc}") from exc
+            raise KeepwatchError(f"corrupt task file {path.name}: {exc}") from exc
     raise Held(f"task is busy: {path.name}")
 
 
@@ -258,6 +265,31 @@ def ledger_records(store: Store) -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------
+# pipeline gate
+# --------------------------------------------------------------------------
+def gate_path(store: Store) -> Path:
+    return store.root / "state" / "gate.json"
+
+
+def pipeline_enabled(store: Store) -> bool:
+    path = gate_path(store)
+    if not path.exists():
+        return True
+    try:
+        return bool(json.loads(path.read_text(encoding="utf-8")).get("pipeline_enabled", True))
+    except (json.JSONDecodeError, OSError, AttributeError):
+        return True
+
+
+def set_pipeline(store: Store, enabled: bool, note: str = "") -> dict[str, Any]:
+    store.require()
+    payload = {"pipeline_enabled": enabled, "note": note, "at": stamp()}
+    _write_atomic(gate_path(store), payload)
+    ledger_append(store, "gate", enabled=enabled, note=note)
+    return payload
+
+
+# --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
 def new_task_id() -> str:
@@ -266,8 +298,10 @@ def new_task_id() -> str:
 
 def send(store: Store, sender: str, to: str, subject: str, body: str = "") -> dict[str, Any]:
     store.require()
+    if not pipeline_enabled(store):
+        raise Stopped("pipeline is stopped; run `keepwatch pipeline --on` to accept new work")
     if to not in store.agents():
-        raise keepwatchError(f"unknown agent: {to!r}")
+        raise KeepwatchError(f"unknown agent: {to!r}")
     task = {
         "id": new_task_id(),
         "from": sender,
@@ -294,7 +328,7 @@ def list_tasks(store: Store, agent: str, box: str = PENDING) -> list[dict[str, A
     for path in sorted(folder.glob("*.json")):
         try:
             tasks.append(_read(path))
-        except keepwatchError:
+        except KeepwatchError:
             continue
     return tasks
 
@@ -306,6 +340,8 @@ def check(store: Store, agent: str) -> list[dict[str, Any]]:
 
 def claim(store: Store, agent: str, task_id: str, ttl: int = DEFAULT_TTL_SECONDS) -> dict[str, Any]:
     store.require()
+    if not pipeline_enabled(store):
+        raise Stopped("pipeline is stopped; no task may be claimed")
     token = store.box(agent, PROCESSING) / f".{task_id}.claim"
     with _exclusive(token):
         return _claim_locked(store, agent, task_id, ttl)
@@ -550,5 +586,177 @@ def status(store: Store, stale_after: int = DEFAULT_STALE_SECONDS) -> dict[str, 
         "agents": agents,
         "expired_leases": expired,
         "next_steps": next_steps,
+        "pipeline_enabled": pipeline_enabled(store),
         "ok": not expired,
     }
+
+
+# --------------------------------------------------------------------------
+# doctor: deterministic self-check, exit 0 when nothing is broken
+# --------------------------------------------------------------------------
+def doctor(store: Store) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+
+    def add(name: str, status: str, detail: str) -> None:
+        checks.append({"check": name, "status": status, "detail": detail})
+
+    if not (store.root / "agents").is_dir():
+        add("layout", "fail", f"{store.root} has no agents/ directory; run `init` first")
+        return {"root": str(store.root), "checks": checks, "ok": False}
+
+    agents = store.agents()
+    add("layout", "ok", f"{len(agents)} agent(s)")
+
+    missing_boxes = []
+    for agent in agents:
+        for box in BOXES:
+            if not store.box(agent, box).is_dir():
+                missing_boxes.append(f"{agent}/{box}")
+    if missing_boxes:
+        add("boxes", "fail", "missing: " + ", ".join(missing_boxes))
+    else:
+        add("boxes", "ok", "pending/processing/done present for every agent")
+
+    seen: dict[str, str] = {}
+    duplicates: list[str] = []
+    corrupt: list[str] = []
+    for agent in agents:
+        for box in BOXES:
+            for path in sorted(store.box(agent, box).glob("*.json")):
+                try:
+                    task = _read(path)
+                except KeepwatchError:
+                    corrupt.append(str(path.relative_to(store.root)))
+                    continue
+                if task["id"] in seen:
+                    duplicates.append(f"{task['id']} in {seen[task['id']]} and {box}")
+                seen[task["id"]] = box
+    add("tasks", "fail" if corrupt or duplicates else "ok",
+        "; ".join(corrupt + duplicates) if (corrupt or duplicates) else f"{len(seen)} task(s) parse")
+
+    orphans = []
+    expired = 0
+    now = utcnow()
+    for agent in agents:
+        for task in list_tasks(store, agent, PROCESSING):
+            lease = task.get("_lease") or {}
+            if not lease.get("expires_at"):
+                orphans.append(task["id"])
+            elif parse_stamp(lease["expires_at"]) <= now:
+                expired += 1
+    add("orphans", "warn" if orphans else "ok",
+        f"{len(orphans)} processing file(s) without a lease - run `reap`" if orphans else "none")
+    add("leases", "warn" if expired else "ok",
+        f"{expired} expired lease(s) - run `reap`" if expired else "all leases live or absent")
+
+    stale_tokens = []
+    for agent in agents:
+        for token in store.box(agent, PROCESSING).glob(".*.claim"):
+            if time.time() - token.stat().st_mtime > 30:
+                stale_tokens.append(token.name)
+    add("tokens", "warn" if stale_tokens else "ok",
+        f"{len(stale_tokens)} stale claim token(s) (older than 30s)" if stale_tokens else "none")
+
+    bad_lines = 0
+    total = 0
+    audit = store.root / "audit"
+    if audit.is_dir():
+        for path in audit.glob("*.jsonl"):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                total += 1
+                try:
+                    json.loads(line)
+                except json.JSONDecodeError:
+                    bad_lines += 1
+    add("ledger", "fail" if bad_lines else "ok",
+        f"{bad_lines} unparseable line(s) out of {total}" if bad_lines else f"{total} record(s) parse")
+
+    bad_hb = 0
+    for agent in agents:
+        path = store.heartbeat_path(agent)
+        if path.exists():
+            try:
+                json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                bad_hb += 1
+    add("heartbeats", "fail" if bad_hb else "ok",
+        f"{bad_hb} unparseable heartbeat file(s)" if bad_hb else "heartbeat files parse")
+
+    add("gate", "ok", "open" if pipeline_enabled(store) else "closed")
+
+    ok = all(c["status"] != "fail" for c in checks)
+    return {"root": str(store.root), "checks": checks, "ok": ok}
+
+
+# --------------------------------------------------------------------------
+# checkpoint: a resume note a human or a fresh agent can pick up
+# --------------------------------------------------------------------------
+def checkpoint(store: Store, out: Path | None = None) -> Path:
+    store.require()
+    now = utcnow()
+    lines = [
+        "# checkpoint",
+        "",
+        f"- root: `{store.root}`",
+        f"- written: {stamp(now)}",
+        f"- pipeline: {'open' if pipeline_enabled(store) else 'CLOSED'}",
+        "",
+    ]
+
+    for agent in store.agents():
+        pending = list_tasks(store, agent, PENDING)
+        processing = list_tasks(store, agent, PROCESSING)
+        finished = list_tasks(store, agent, DONE)
+        hb_path = store.heartbeat_path(agent)
+        hb = "never seen"
+        if hb_path.exists():
+            try:
+                hb = f"{int(age_seconds(json.loads(hb_path.read_text(encoding='utf-8'))['at']))}s ago"
+            except (KeyError, ValueError, json.JSONDecodeError):
+                hb = "unreadable"
+        lines += [
+            f"## {agent}",
+            "",
+            f"- heartbeat: {hb}",
+            f"- pending {len(pending)} / processing {len(processing)} / done {len(finished)}",
+        ]
+        for task in processing:
+            lease = task.get("_lease") or {}
+            expires = lease.get("expires_at")
+            overdue = ""
+            if expires and parse_stamp(expires) <= now:
+                overdue = f" (EXPIRED {int((now - parse_stamp(expires)).total_seconds())}s ago)"
+            lines.append(
+                f"  - in progress: `{task['id']}` held by {lease.get('owner')}, "
+                f"lease until {expires}{overdue}"
+            )
+        for task in pending[:10]:
+            lines.append(f"  - waiting: `{task['id']}` {task.get('subject', '')}")
+        if len(pending) > 10:
+            lines.append(f"  - … and {len(pending) - 10} more")
+        lines.append("")
+
+    recent = ledger_records(store)[-10:]
+    if recent:
+        lines += ["## last 10 ledger records", ""]
+        for record in recent:
+            extra = {k: v for k, v in record.items() if k not in ("at", "event", "schema")}
+            lines.append(f"- {record.get('at')} **{record.get('event')}** {extra}")
+        lines.append("")
+
+    lines += [
+        "## resume",
+        "",
+        "```",
+        "keepwatch status                      # what is stuck",
+        "keepwatch reap                        # return expired leases",
+        "keepwatch run --who <agent> -- <cmd>  # claim, run, record the rc, close",
+        "```",
+        "",
+    ]
+
+    target = out or (store.root / "CHECKPOINT.md")
+    target.write_text("\n".join(lines), encoding="utf-8")
+    return target

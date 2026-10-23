@@ -28,11 +28,11 @@ class TestLayout(Base):
                 self.assertTrue((self.root / "agents" / agent / box).is_dir())
 
     def test_bad_agent_id_is_rejected(self):
-        with self.assertRaises(core.keepwatchError):
+        with self.assertRaises(core.KeepwatchError):
             self.store.agent_dir("Not Valid")
 
     def test_unknown_root_fails_loudly(self):
-        with self.assertRaises(core.keepwatchError):
+        with self.assertRaises(core.KeepwatchError):
             core.status(core.Store(self.root / "nope"))
 
 
@@ -45,7 +45,7 @@ class TestTaskFlow(Base):
         self.assertEqual(tasks[0]["subject"], "do it")
 
     def test_send_to_unknown_agent_raises(self):
-        with self.assertRaises(core.keepwatchError):
+        with self.assertRaises(core.KeepwatchError):
             core.send(self.store, "reviewer", "ghost", "x")
 
     def test_claim_moves_task_and_starts_one_try(self):

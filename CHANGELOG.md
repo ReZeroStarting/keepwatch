@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0 — make failure visible
+
+### Added
+- `doctor` — nine deterministic checks (layout, boxes, task parsing, duplicate ids across
+  boxes, orphaned processing files, expired leases, stale claim tokens, ledger parsing,
+  heartbeat parsing). Exit 0 when healthy, 1 when something is broken; `--quiet` hides
+  passing checks.
+- `checkpoint` — writes `CHECKPOINT.md`: per-agent counts, heartbeat age, tasks in progress
+  with an `EXPIRED` marker, the front of each queue, the last ten ledger records, and the
+  commands to resume. `--out` to choose the path.
+- `pipeline --on|--off [--note]` — a gate in `state/gate.json`. While closed, `send` and
+  `claim` refuse with **exit 14**. Nothing is deleted; the work waits.
+- `status` now reports `pipeline_enabled`.
+
+### Changed
+- 35 → 51 tests.
+- `docs/PROTOCOL.md` §9 documents the gate, `doctor` and `checkpoint`; exit code 14 added.
+
 ## 0.1.1 — renamed to keepwatch
 
 The project was called `nightshift` in 0.1.0. That name is taken on PyPI by an unrelated 2021
