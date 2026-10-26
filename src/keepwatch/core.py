@@ -34,6 +34,9 @@ BOXES = (PENDING, PROCESSING, DONE)
 AGENT_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 DEFAULT_TTL_SECONDS = 300
 DEFAULT_STALE_SECONDS = 1200
+# A claim holds its token for milliseconds. Five seconds is already generous, and
+# it bounds how long a hard-killed claimer can block the task.
+TOKEN_STALE_SECONDS = 5.0
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -200,7 +203,7 @@ def _move(src: Path, dst: Path) -> None:
 
 
 @contextmanager
-def _exclusive(path: Path, stale_after: float = 30.0):
+def _exclusive(path: Path, stale_after: float = TOKEN_STALE_SECONDS):
     """A mutex built on ``O_CREAT | O_EXCL``.
 
     Do **not** use rename as a lock. On at least one Windows filesystem two
@@ -230,6 +233,16 @@ def _exclusive(path: Path, stale_after: float = 30.0):
         yield
     finally:
         path.unlink(missing_ok=True)
+
+
+def _crash_point(name: str) -> None:
+    """Test seam: die like SIGKILL at a named moment, leaving no cleanup behind.
+
+    Only active when KEEPWATCH_CRASH_AT names this point. It exists so the crash
+    behaviour can be tested for real instead of being mocked.
+    """
+    if os.environ.get("KEEPWATCH_CRASH_AT") == name:
+        os._exit(137)
 
 
 def heartbeat(store: Store, agent: str) -> dict[str, Any]:
@@ -354,9 +367,13 @@ def _claim_locked(store: Store, agent: str, task_id: str, ttl: int) -> dict[str,
 
     if pending.exists():
         task = _read(pending)
-        _move(pending, processing)
-        task["state"] = PROCESSING
+        # Record the attempt before the move. If this process dies between the
+        # move and the lease write, the file still says someone took it once.
         task["tries"] = int(task.get("tries", 0)) + 1
+        _write_atomic(pending, task)
+        _move(pending, processing)
+        _crash_point("after_move")  # the worst moment: moved, but no lease yet
+        task["state"] = PROCESSING
         task["_lease"] = {
             "owner": agent,
             "acquired_at": stamp(now),
@@ -505,7 +522,9 @@ def reap(store: Store, stale_after: int = 0) -> list[dict[str, Any]]:
                 with _exclusive(token):
                     task["state"] = PENDING
                     task["reaped_at"] = stamp(now)
-                    task["prev_owners"] = list(task.get("prev_owners", [])) + [lease.get("owner")]
+                    owner = lease.get("owner")
+                    if owner:  # an orphan never had a lease: nobody to record
+                        task["prev_owners"] = list(task.get("prev_owners", [])) + [owner]
                     task["_lease"] = None
                     _write_atomic(store.task_path(agent, PROCESSING, task_id), task)
                     _move(
@@ -652,10 +671,10 @@ def doctor(store: Store) -> dict[str, Any]:
     stale_tokens = []
     for agent in agents:
         for token in store.box(agent, PROCESSING).glob(".*.claim"):
-            if time.time() - token.stat().st_mtime > 30:
+            if time.time() - token.stat().st_mtime > TOKEN_STALE_SECONDS:
                 stale_tokens.append(token.name)
     add("tokens", "warn" if stale_tokens else "ok",
-        f"{len(stale_tokens)} stale claim token(s) (older than 30s)" if stale_tokens else "none")
+        f"{len(stale_tokens)} stale claim token(s) - a claimer died mid-claim" if stale_tokens else "none")
 
     bad_lines = 0
     total = 0

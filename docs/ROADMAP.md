@@ -34,7 +34,7 @@
 - [x] `pipeline --on|--off` — one gate; `send`/`claim` return exit 14 while closed
 - [x] 51 tests (16 new): corrupt task files, duplicate ids, orphans, stale tokens, the gate
 - [ ] dependencies (`--after`) and a `hold` queue
-- [ ] crash-injection test: kill the process between claim and lease write
+- [x] crash-injection test: kill the process between claim and lease write (`KEEPWATCH_CRASH_AT`)
 - [ ] one real overnight unattended run, recorded in `docs/field-notes.md`
 
 **Acceptance:** kill the worker at any point; within one TTL the system says what died and

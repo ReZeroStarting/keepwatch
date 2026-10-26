@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.1 — crash injection
+
+### Fixed
+- **An attempt was lost when a claimer died mid-claim.** `tries` is now written to the
+  pending file *before* the move into `processing/`, so a process killed between the move
+  and the lease write leaves a task that still records the attempt.
+- **`reap` wrote `null` into `prev_owners`** when recovering an orphan (a task that never
+  had a lease, so there was no previous owner to record).
+
+### Changed
+- Claim tokens count as stale after **5 s** instead of 30 s. A claim holds its token for
+  milliseconds, so this only bounds how long a hard-killed claimer can block the task.
+- New test seam `KEEPWATCH_CRASH_AT=after_move`: the claimant dies exactly between the
+  move and the lease write. 5 tests drive it through a real subprocess.
+
 ## 0.2.0 — make failure visible
 
 ### Added

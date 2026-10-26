@@ -98,7 +98,8 @@ Claiming is now guarded by an exclusive-create token:
 - `<processing>/.<task-id>.claim` is created with `O_CREAT|O_EXCL`, which is atomic on both
   NTFS and POSIX (measured: 16 concurrent threads, exactly 1 winner)
 - the token lives only for one state transition — a few milliseconds on the happy path
-- a token older than 30 seconds is treated as stale and reclaimed
+- a token older than 5 seconds is treated as stale and reclaimed (`KEEPWATCH_CRASH_AT=after_move`
+  makes a claimant die mid-claim, which is how that path is tested)
 - tokens start with `.` and do not end in `.json`, so `list_tasks` never reads them
 
 **Lesson:** filesystem atomicity guarantees are platform-specific. "Use a rename as a lock"

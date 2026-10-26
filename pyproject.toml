@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # "agent-watchdog", "deadman", "backstop", "watchpost", "handover" are all taken.
 # See docs/COMPETITION.md.
 name = "keepwatch"
-version = "0.2.0"
+version = "0.2.1"
 description = "Reliability layer for unattended agent mailboxes: leases, heartbeats, and silent-failure detection."
 readme = "README.md"
 requires-python = ">=3.9"
