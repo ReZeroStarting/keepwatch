@@ -12,6 +12,11 @@ from typing import Any
 
 from . import __version__, core
 
+COMMANDS = (
+    "init", "send", "check", "claim", "renew", "release", "run",
+    "done", "verify", "reap", "status", "doctor", "checkpoint", "pipeline",
+)
+
 
 def _default_root() -> str:
     return os.environ.get("KEEPWATCH_ROOT", ".")
@@ -267,9 +272,27 @@ def run_task(store: core.Store, args: argparse.Namespace) -> int:
     return rc if 0 < rc < 256 else core.EXIT_ERROR
 
 
+def normalise(argv: list[str]) -> list[str]:
+    """Let ``--json`` sit anywhere, including after the sub-command.
+
+    Agents write ``check --json`` far more often than ``--json check``, and argparse
+    rejects the former because ``--json`` is a top-level flag. Move it in front of the
+    sub-command when it appears after it, but never touch anything after ``--`` (that
+    belongs to the wrapped command).
+    """
+    separator = argv.index("--") if "--" in argv else len(argv)
+    head, tail = list(argv[:separator]), list(argv[separator:])
+    if "--json" in head:
+        json_at = head.index("--json")
+        command_at = next((i for i, arg in enumerate(head) if arg in COMMANDS), None)
+        if command_at is not None and json_at > command_at:
+            head = ["--json"] + head[:json_at] + head[json_at + 1 :]
+    return head + tail
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(normalise(sys.argv[1:] if argv is None else list(argv)))
     try:
         return run(args)
     except core.KeepwatchError as exc:

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.2 — `--json` works after the sub-command
+
+### Fixed
+- `keepwatch check --json` (flag after the command) was rejected by argparse with a usage
+  error, which looked exactly like "no tasks". Agents write it that way far more often than
+  `--json check`. The flag is now accepted in both positions; anything after a literal `--`
+  is left alone so a wrapped command keeps its own flags.
+
+Found by a 6h45m soak run, where the harness's own `check --json` call silently returned
+nothing for the whole duration.
+
+60 tests.
+
 ## 0.2.1 — crash injection
 
 ### Fixed
