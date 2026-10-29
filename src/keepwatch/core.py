@@ -467,6 +467,16 @@ def has_ok_verify(store: Store, task_id: str) -> bool:
     )
 
 
+def _require_verify(store: Store, task_id: str, force: bool) -> None:
+    if force:
+        return
+    if not has_ok_verify(store, task_id):
+        raise Blocked(
+            f"refusing to close {task_id}: no verify record with rc=0. "
+            f"Run `verify --id {task_id} --name <check> --rc 0` first, or pass --force."
+        )
+
+
 def done(
     store: Store,
     agent: str,
@@ -474,27 +484,47 @@ def done(
     note: str = "",
     force: bool = False,
 ) -> dict[str, Any]:
+    """Close a task.
+
+    A task in ``processing`` must be closed by the holder of its lease. A task still
+    in ``pending`` has no lease to honour, so it can be cancelled in place: nothing
+    is running, and refusing that just forced people to `claim` first and then throw
+    the lease away.
+    """
     store.require()
     processing = store.task_path(agent, PROCESSING, task_id)
-    with _exclusive(store.box(agent, PROCESSING) / f".{task_id}.claim"):
-        task = _read(processing)
-        lease = task.get("_lease") or {}
-        if lease.get("owner") not in (None, agent):
-            raise Held(f"task {task_id} is held by {lease.get('owner')}")
+    pending = store.task_path(agent, PENDING, task_id)
 
-        if not force and not has_ok_verify(store, task_id):
-            raise Blocked(
-                f"refusing to close {task_id}: no verify record with rc=0. "
-                f"Run `verify --id {task_id} --name <check> --rc 0` first, or pass --force."
-            )
+    if processing.exists():
+        with _exclusive(store.box(agent, PROCESSING) / f".{task_id}.claim"):
+            task = _read(processing)
+            lease = task.get("_lease") or {}
+            if lease.get("owner") not in (None, agent):
+                raise Held(f"task {task_id} is held by {lease.get('owner')}")
+            _require_verify(store, task_id, force)
 
-        task["state"] = DONE
-        task["_lease"] = None
-        task["closed_at"] = stamp()
-        task["closed_by"] = agent
-        task["note"] = note
-        _write_atomic(processing, task)
-        _move(processing, store.task_path(agent, DONE, task_id))
+            task["state"] = DONE
+            task["_lease"] = None
+            task["closed_at"] = stamp()
+            task["closed_by"] = agent
+            task["note"] = note
+            _write_atomic(processing, task)
+            _move(processing, store.task_path(agent, DONE, task_id))
+    elif pending.exists():
+        with _exclusive(store.box(agent, PENDING) / f".{task_id}.close"):
+            task = _read(pending)
+            _require_verify(store, task_id, force)
+
+            task["state"] = DONE
+            task["closed_at"] = stamp()
+            task["closed_by"] = agent
+            task["note"] = note
+            task["closed_without_claim"] = True
+            _write_atomic(pending, task)
+            _move(pending, store.task_path(agent, DONE, task_id))
+    else:
+        raise NotFound(f"no such task in {agent}: {task_id}")
+
     ledger_append(store, "done", id=task_id, by=agent, note=note)
     return task
 

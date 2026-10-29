@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -76,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--id", help="task id (default: the oldest pending task)")
     p_run.add_argument("--ttl", type=int, default=core.DEFAULT_TTL_SECONDS)
     p_run.add_argument("--max-tries", type=int, default=3)
+    p_run.add_argument("--name", help="verify label (default: the command itself)")
     p_run.add_argument("cmd", nargs=argparse.REMAINDER)
 
     sub.add_parser("reap", help="return expired leases to pending")
@@ -109,6 +111,25 @@ def _emit(args: argparse.Namespace, payload: Any, human: list[str]) -> None:
 def _short(text: str, width: int = 40) -> str:
     text = (text or "").replace("\n", " ")
     return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def _resolve_command(cmd: list[str]) -> list[str]:
+    """Make ``run`` able to start what people actually type.
+
+    On Windows a ``.cmd``/``.bat`` shim (``mvn``, ``npm``, ``pnpm``, ``gradlew`` …)
+    is not an executable image: ``CreateProcess`` refuses it with ``WinError 2``.
+    Resolve the name through ``PATH``/``PATHEXT`` and hand batch files to ``cmd /c``.
+    Nothing here changes POSIX behaviour.
+    """
+    if os.name != "nt" or not cmd:
+        return cmd
+    found = shutil.which(cmd[0])
+    if not found:
+        return cmd
+    if found.lower().endswith((".cmd", ".bat")):
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        return [comspec, "/c", *cmd]
+    return [found, *cmd[1:]]
 
 
 def run(args: argparse.Namespace) -> int:
@@ -246,11 +267,31 @@ def run_task(store: core.Store, args: argparse.Namespace) -> int:
         task_id = task["id"]
 
     claimed = core.claim(store, args.who, task_id, args.ttl)
-    label = " ".join(cmd)
+    argv = _resolve_command(cmd)
+    label = args.name or " ".join(cmd)
     print(f"running {task_id} (try {claimed['tries']}): {label}", flush=True)
 
     # stdio is inherited on purpose: the agent's output must reach the human.
-    rc = subprocess.run(cmd, check=False).returncode
+    try:
+        rc = subprocess.run(argv, check=False).returncode
+    except KeyboardInterrupt:
+        # The human stopped it; the task must not stay leased until it expires.
+        core.release(store, args.who, task_id, reason="interrupted")
+        core.ledger_append(store, "interrupt", id=task_id, by=args.who)
+        print(f"released {task_id} back to pending (interrupted)", flush=True)
+        return 130
+    except FileNotFoundError:
+        rc = 127
+        print(f"keepwatch: command not found: {cmd[0]}", file=sys.stderr, flush=True)
+    except PermissionError:
+        rc = 126
+        print(f"keepwatch: permission denied: {cmd[0]}", file=sys.stderr, flush=True)
+    except OSError as exc:
+        # Whatever went wrong at spawn time, the lease must not be leaked: the task
+        # goes back to pending so the next agent can retry it explicitly.
+        rc = 126
+        print(f"keepwatch: cannot start {cmd[0]}: {exc}", file=sys.stderr, flush=True)
+
     core.verify(store, task_id, label, rc)
 
     if rc == 0:
@@ -290,7 +331,27 @@ def normalise(argv: list[str]) -> list[str]:
     return head + tail
 
 
+def _tune_stdio() -> None:
+    """Make redirected output UTF-8 instead of the Windows OEM code page.
+
+    A real console is left alone (Python talks to it through ``WriteConsoleW``), but as
+    soon as stdout is a pipe — a harness, CI, a log file — Windows defaults to cp936 and
+    every Chinese subject turns into mojibake for whoever reads it back as UTF-8.
+    """
+    if os.environ.get("PYTHONIOENCODING"):
+        return
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is None or stream.isatty():
+                continue
+            if (stream.encoding or "").lower().replace("-", "") != "utf8":
+                stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (AttributeError, ValueError):
+            continue
+
+
 def main(argv: list[str] | None = None) -> int:
+    _tune_stdio()
     parser = build_parser()
     args = parser.parse_args(normalise(sys.argv[1:] if argv is None else list(argv)))
     try:

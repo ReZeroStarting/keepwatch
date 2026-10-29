@@ -105,6 +105,37 @@ class TestRun(unittest.TestCase):
         code, _ = call("--root", self.root, "run", "--who", "builder")
         self.assertEqual(code, core.EXIT_ERROR)
 
+    def test_missing_executable_releases_instead_of_leaking_the_lease(self):
+        # Before: FileNotFoundError escaped from subprocess.run, the task stayed in
+        # processing/ for the whole TTL and had to be reaped by hand.
+        code, out = call("--root", self.root, "run", "--who", "builder", "--",
+                         "definitely-not-a-command-4c1f")
+        self.assertEqual(code, 127)
+        self.assertIn("released", out)
+        self.assertEqual(self.counts(), {"pending": 1, "processing": 0, "done": 0})
+
+        task = core.check(core.Store(self.root), "builder")[0]
+        self.assertIsNone(task["_lease"])
+        verify = [r for r in core.ledger_records(core.Store(self.root)) if r["event"] == "verify"]
+        self.assertEqual(verify[-1]["rc"], 127)
+
+    @unittest.skipIf(sys.platform != "win32", "batch files only exist on Windows")
+    def test_batch_file_is_run_through_cmd(self):
+        # `mvn`, `npm`, `pnpm`, `gradlew` are .cmd shims; CreateProcess cannot start
+        # them, so they must be handed to `cmd /c`.
+        script = Path(self.root) / "shim.cmd"
+        script.write_text("@echo off\r\nexit /b 0\r\n", encoding="utf-8")
+        code, out = call("--root", self.root, "run", "--who", "builder", "--", str(script))
+        self.assertEqual(code, 0)
+        self.assertIn("closed", out)
+        self.assertEqual(self.counts(), {"pending": 0, "processing": 0, "done": 1})
+
+    def test_name_overrides_the_verify_label(self):
+        code, _ = call("--root", self.root, "run", "--who", "builder", "--name", "smoke", "--", *ok_cmd())
+        self.assertEqual(code, 0)
+        verify = [r for r in core.ledger_records(core.Store(self.root)) if r["event"] == "verify"]
+        self.assertEqual(verify[-1]["name"], "smoke")
+
 
 if __name__ == "__main__":
     unittest.main()

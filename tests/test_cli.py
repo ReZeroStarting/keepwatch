@@ -75,6 +75,28 @@ class TestCli(unittest.TestCase):
         code, _ = call("--root", self.root, "check", "--who", "builder")
         self.assertEqual(code, 0)
 
+    def test_can_cancel_a_task_nobody_claimed(self):
+        # Nobody is running it, so there is no lease to honour: closing it in place
+        # must work. Before, `done` only looked in processing/ and answered
+        # "task not found", which made an unclaimed task impossible to cancel.
+        call("--root", self.root, "send", "--from", "reviewer", "--to", "builder", "--subject", "obsolete")
+        task_id = self._only_pending_id()
+        call("--root", self.root, "verify", "--id", task_id, "--name", "cancelled", "--rc", "0")
+
+        code, out = call("--root", self.root, "done", "--who", "builder", "--id", task_id, "--note", "不再需要")
+        self.assertEqual(code, 0)
+        self.assertIn("closed", out)
+
+        store = core.Store(self.root)
+        self.assertEqual(core.list_tasks(store, "builder", "pending"), [])
+        self.assertEqual(len(core.list_tasks(store, "builder", "done")), 1)
+
+    def test_cancelling_pending_still_needs_a_verify(self):
+        call("--root", self.root, "send", "--from", "reviewer", "--to", "builder", "--subject", "obsolete")
+        task_id = self._only_pending_id()
+        code, _ = call("--root", self.root, "done", "--who", "builder", "--id", task_id)
+        self.assertEqual(code, core.EXIT_BLOCKED)
+
 
 if __name__ == "__main__":
     unittest.main()

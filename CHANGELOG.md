@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.3 — Windows shims, leaked leases, cancel unclaimed work
+
+Found while using keepwatch to gate a real acceptance run (5 checks: mvn test, vitest,
+vue-tsc, an SSE protocol probe and a 19-step browser E2E) on Windows.
+
+### Fixed
+- **`run` could not start a `.cmd`/`.bat` shim.** `mvn`, `npm`, `pnpm`, `gradlew` are
+  batch files; `CreateProcess` cannot execute them, so `run -- mvn test` died with
+  `FileNotFoundError: [WinError 2]`. The command is now resolved through `PATH`/`PATHEXT`
+  and batch files are handed to `cmd /c`. POSIX behaviour is untouched.
+- **A failed spawn leaked the lease.** The same `FileNotFoundError` escaped before the
+  task was released, leaving it in `processing/` holding a 10-minute lease that only
+  `reap` could clear by hand. Spawn errors now record `verify rc=127` (missing command)
+  or `rc=126` (permission/OS error) and put the task straight back to `pending`.
+- **Ctrl-C leaked the lease too.** Interrupting a wrapped command now releases the task
+  and exits 130.
+- **`done` refused unclaimed tasks** with `task not found`, so a pending task could only
+  be cancelled by claiming it first and throwing the lease away. `done` now closes a
+  pending task in place (the verify gate still applies).
+- **Mojibake for non-ASCII text on Windows.** Redirected stdout used the OEM code page
+  (cp936), so any harness reading the output as UTF-8 saw garbage for Chinese subjects.
+  Pipes now get UTF-8; a real console is left alone.
+
+### Added
+- `run --name LABEL` — the verify record no longer has to be the whole command line.
+
+65 tests.
+
 ## 0.2.2 — `--json` works after the sub-command
 
 ### Fixed
