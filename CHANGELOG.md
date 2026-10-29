@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.4 — 把 PyPI 上的项目链接改对
+
+### Fixed
+- `project.urls` 里一直是占位符 `github.com/OWNER/keepwatch`，PyPI 页面右侧的
+  Documentation / Issues 点进去是 404。改成真实仓库地址，并补上 Homepage、
+  Source、Changelog 和一个 Gitee 镜像链接。
+
+只动元数据，代码没有变化。
+
+65 tests.
+
 ## 0.2.3 — Windows shims, leaked leases, cancel unclaimed work
 
 Found while using keepwatch to gate a real acceptance run (5 checks: mvn test, vitest,

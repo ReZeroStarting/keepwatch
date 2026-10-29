@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # "agent-watchdog", "deadman", "backstop", "watchpost", "handover" are all taken.
 # See docs/COMPETITION.md.
 name = "keepwatch"
-version = "0.2.3"
+version = "0.2.4"
 description = "Reliability layer for unattended agent mailboxes: leases, heartbeats, and silent-failure detection."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,8 +29,12 @@ dev = ["pytest>=8"]
 keepwatch = "keepwatch.cli:main"
 
 [project.urls]
-Documentation = "https://github.com/OWNER/keepwatch#readme"
-Issues = "https://github.com/OWNER/keepwatch/issues"
+Homepage = "https://github.com/ReZeroStarting/keepwatch"
+Source = "https://github.com/ReZeroStarting/keepwatch"
+Documentation = "https://github.com/ReZeroStarting/keepwatch#readme"
+Issues = "https://github.com/ReZeroStarting/keepwatch/issues"
+Changelog = "https://github.com/ReZeroStarting/keepwatch/blob/main/CHANGELOG.md"
+Mirror = "https://gitee.com/cloudrose/keepwtach"
 
 [tool.setuptools.packages.find]
 where = ["src"]
